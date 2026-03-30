@@ -66,15 +66,22 @@ export default function Dashboard({ addToast, downloads = [], connected = false 
   const handleCancel = async (songId) => {
     try {
       await cancelDownload(songId);
-      addToast('info', 'Download cancelled', null);
+      addToast('info', 'Removed', null);
     } catch (e) {
-      addToast('error', 'Cancel failed', e.message);
+      addToast('error', 'Remove failed', e.message);
     }
   };
 
+  const handleClearFailed = async () => {
+    const failed = downloads.filter((d) => d.status?.toLowerCase() === 'failed');
+    await Promise.allSettled(failed.map((d) => cancelDownload(d.song_id || d.id)));
+    addToast('info', `Cleared ${failed.length} failed`, null);
+  };
+
   const activeDownloads = downloads.filter((d) =>
-    ['downloading', 'queued', 'tagging', 'processing'].includes((d.status || '').toLowerCase())
+    ['downloading', 'queued', 'tagging', 'organizing', 'searching', 'processing'].includes((d.status || '').toLowerCase())
   );
+  const failedCount = downloads.filter((d) => d.status?.toLowerCase() === 'failed').length;
   const queuedCount = downloads.filter((d) => d.status?.toLowerCase() === 'queued').length;
   const downloadingCount = downloads.filter((d) => d.status?.toLowerCase() === 'downloading').length;
 
@@ -153,7 +160,14 @@ export default function Dashboard({ addToast, downloads = [], connected = false 
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
           <div className="section-header" style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', marginBottom: 0 }}>
             <h2>Download Queue</h2>
-            <Link to="/search" className="btn btn-ghost btn-sm">+ Add</Link>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {failedCount > 0 && (
+                <button className="btn btn-ghost btn-sm" onClick={handleClearFailed}>
+                  Clear Failed ({failedCount})
+                </button>
+              )}
+              <Link to="/search" className="btn btn-ghost btn-sm">+ Add</Link>
+            </div>
           </div>
 
           {downloads.length === 0 ? (
@@ -210,11 +224,11 @@ export default function Dashboard({ addToast, downloads = [], connected = false 
                           )}
                         </td>
                         <td>
-                          {['queued', 'downloading'].includes(dl.status?.toLowerCase()) && (
+                          {['queued', 'downloading', 'failed'].includes(dl.status?.toLowerCase()) && (
                             <button
                               className="btn btn-danger btn-xs"
                               onClick={() => handleCancel(dl.song_id || dl.id)}
-                              title="Cancel download"
+                              title={dl.status?.toLowerCase() === 'failed' ? 'Dismiss' : 'Cancel'}
                             >
                               ✕
                             </button>

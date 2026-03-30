@@ -176,13 +176,13 @@ class SlskdClient:
         Returns the slskd transfer id.
         """
         async with self._client() as client:
-            payload = {"filename": filename, "size": size}
+            # slskd expects an array of QueueDownloadRequest objects
+            payload = [{"filename": filename, "size": size}]
             resp = await client.post(
                 f"/api/v0/transfers/downloads/{username}", json=payload
             )
             if not resp.is_success:
-                body = resp.text
-                logger.error("slskd download 400 body: %s", body)
+                logger.error("slskd download error body: %s", resp.text)
             resp.raise_for_status()
             data = resp.json()
             # slskd returns the transfer object; id may be in 'id' field

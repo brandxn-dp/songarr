@@ -153,13 +153,13 @@ class SpotifyService:
         limit = 100
 
         while True:
-            # Use playlist_tracks (not playlist_items) to avoid the
-            # additional_types=track,episode param that causes Spotify 403s
-            page = self._sp.playlist_tracks(
-                playlist_id,
-                offset=offset,
-                limit=limit,
+            # Use _get() directly to avoid spotipy adding additional_types,
+            # which causes 403s on newer Spotify API versions
+            page = self._sp._get(
+                f"playlists/{playlist_id}/tracks",
                 fields="items(track(id,name,artists,album,track_number,disc_number,duration_ms,external_ids,is_local)),next",
+                limit=limit,
+                offset=offset,
             )
             items: list[dict] = page.get("items", [])
             for item in items:
