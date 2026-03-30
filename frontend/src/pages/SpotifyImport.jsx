@@ -84,7 +84,7 @@ export default function SpotifyImport({ addToast }) {
       await loadPlaylistTracks(playlist.id || playlist.playlist_id);
       await loadPlaylists();
     } catch (err) {
-      if (err.message.includes('credentials') || err.message.includes('Spotify') || err.message.includes('401')) {
+      if (err.message.includes('credentials') || err.message.includes('401') || err.message.includes('not configured')) {
         setUrlError('Spotify credentials not configured. Please check Settings.');
       } else {
         setUrlError(err.message);

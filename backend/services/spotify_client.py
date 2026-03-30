@@ -153,7 +153,9 @@ class SpotifyService:
         limit = 100
 
         while True:
-            page = self._sp.playlist_items(
+            # Use playlist_tracks (not playlist_items) to avoid the
+            # additional_types=track,episode param that causes Spotify 403s
+            page = self._sp.playlist_tracks(
                 playlist_id,
                 offset=offset,
                 limit=limit,
