@@ -1,16 +1,22 @@
 """
 Spotipy-based Spotify client for playlist and track data retrieval.
 Credentials are fetched fresh from the DB settings on each call.
+Supports both Client Credentials (public playlists) and OAuth access tokens
+(private playlists).
 """
 import logging
 import re
+import time
 from dataclasses import dataclass, field
 from typing import Optional
 
 import spotipy
-from spotipy.oauth2 import SpotifyClientCredentials
+from spotipy.oauth2 import SpotifyClientCredentials, SpotifyOAuth
+import spotipy.cache_handler
 
 logger = logging.getLogger(__name__)
+
+OAUTH_SCOPE = "playlist-read-private playlist-read-collaborative"
 
 
 # ---------------------------------------------------------------------------
@@ -117,19 +123,74 @@ class SpotifyService:
     Wraps spotipy with credentials sourced from the DB settings dict.
     Construct a new instance per request (or per operation) so credentials
     are always fresh.
+
+    If access_token is provided, uses it directly (OAuth flow for private
+    playlists). Otherwise falls back to Client Credentials.
     """
 
-    def __init__(self, client_id: str, client_secret: str):
+    def __init__(self, client_id: str, client_secret: str, access_token: str = None):
         if not client_id or not client_secret:
             raise ValueError(
                 "Spotify client_id and client_secret must be configured in settings."
             )
-        self._sp = spotipy.Spotify(
-            auth_manager=SpotifyClientCredentials(
-                client_id=client_id,
-                client_secret=client_secret,
+        if access_token:
+            self._sp = spotipy.Spotify(auth=access_token)
+        else:
+            self._sp = spotipy.Spotify(
+                auth_manager=SpotifyClientCredentials(
+                    client_id=client_id,
+                    client_secret=client_secret,
+                )
             )
+
+    # ------------------------------------------------------------------
+    # OAuth static helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def get_auth_url(client_id: str, client_secret: str, redirect_uri: str) -> str:
+        """Return the Spotify OAuth authorization URL for the user to visit."""
+        oauth = SpotifyOAuth(
+            client_id=client_id,
+            client_secret=client_secret,
+            redirect_uri=redirect_uri,
+            scope=OAUTH_SCOPE,
+            cache_handler=spotipy.cache_handler.MemoryCacheHandler(),
+            open_browser=False,
         )
+        return oauth.get_authorize_url()
+
+    @staticmethod
+    def exchange_code(
+        client_id: str, client_secret: str, redirect_uri: str, code: str
+    ) -> dict:
+        """Exchange an authorization code for token_info dict."""
+        oauth = SpotifyOAuth(
+            client_id=client_id,
+            client_secret=client_secret,
+            redirect_uri=redirect_uri,
+            scope=OAUTH_SCOPE,
+            cache_handler=spotipy.cache_handler.MemoryCacheHandler(),
+            open_browser=False,
+        )
+        token_info = oauth.get_access_token(code, as_dict=True, check_cache=False)
+        return token_info
+
+    @staticmethod
+    def refresh_token(
+        client_id: str, client_secret: str, redirect_uri: str, refresh_token: str
+    ) -> dict:
+        """Refresh an OAuth token and return new token_info dict."""
+        oauth = SpotifyOAuth(
+            client_id=client_id,
+            client_secret=client_secret,
+            redirect_uri=redirect_uri,
+            scope=OAUTH_SCOPE,
+            cache_handler=spotipy.cache_handler.MemoryCacheHandler(),
+            open_browser=False,
+        )
+        token_info = oauth.refresh_access_token(refresh_token)
+        return token_info
 
     # ------------------------------------------------------------------
     # Public API
@@ -143,7 +204,7 @@ class SpotifyService:
         playlist_id = _extract_playlist_id(playlist_id_or_url)
         logger.info("Fetching Spotify playlist: %s", playlist_id)
 
-        pl = self._sp.playlist(playlist_id, fields="id,name,description,tracks.total")
+        pl = self._sp._get(f"playlists/{playlist_id}")
         pl_name: str = pl.get("name", "")
         pl_desc: Optional[str] = pl.get("description") or None
         total: int = pl.get("tracks", {}).get("total", 0)

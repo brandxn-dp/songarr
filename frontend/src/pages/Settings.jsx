@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { getSettings, updateSettings, testSlskd, testSpotify } from '../api/client.js';
+import { getSettings, updateSettings, testSlskd, testSpotify, getSpotifyAuthStatus, getSpotifyAuthUrl, disconnectSpotify } from '../api/client.js';
 
 const TEMPLATE_VARS = [
   '{artist}', '{album_artist}', '{album}', '{title}',
@@ -65,6 +65,7 @@ export default function Settings({ addToast }) {
   const [slskdTestMsg, setSlskdTestMsg] = useState('');
   const [spotifyTest, setSpotifyTest] = useState(null);
   const [spotifyTestMsg, setSpotifyTestMsg] = useState('');
+  const [spotifyConnected, setSpotifyConnected] = useState(false);
 
   const loadSettings = useCallback(async () => {
     setLoading(true);
@@ -80,9 +81,50 @@ export default function Settings({ addToast }) {
     }
   }, []);
 
+  const loadSpotifyStatus = useCallback(async () => {
+    try {
+      const status = await getSpotifyAuthStatus();
+      setSpotifyConnected(status?.connected ?? false);
+    } catch {
+      setSpotifyConnected(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadSettings();
-  }, [loadSettings]);
+    loadSpotifyStatus();
+
+    // Check for ?spotify_connected=1 in URL after OAuth redirect
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('spotify_connected') === '1') {
+      addToast('success', 'Spotify connected', 'Your Spotify account has been connected successfully.');
+      // Clean up URL
+      const url = new URL(window.location.href);
+      url.searchParams.delete('spotify_connected');
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, [loadSettings, loadSpotifyStatus, addToast]);
+
+  const handleConnectSpotify = async () => {
+    try {
+      const res = await getSpotifyAuthUrl();
+      if (res?.auth_url) {
+        window.open(res.auth_url, '_blank');
+      }
+    } catch (err) {
+      addToast('error', 'Failed to get auth URL', err.message);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    try {
+      await disconnectSpotify();
+      setSpotifyConnected(false);
+      addToast('success', 'Spotify disconnected', 'Your Spotify account has been disconnected.');
+    } catch (err) {
+      addToast('error', 'Failed to disconnect', err.message);
+    }
+  };
 
   const set = (field) => (e) => {
     const val = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
@@ -258,6 +300,30 @@ export default function Settings({ addToast }) {
             {spotifyTest === 'fail' && (
               <span className="test-result error">✕ {spotifyTestMsg}</span>
             )}
+          </div>
+
+          <div className="spotify-connect-panel" style={{ marginTop: 16 }}>
+            <div className="form-group">
+              <label>ACCOUNT CONNECTION</label>
+              {spotifyConnected ? (
+                <div className="spotify-connected" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span className="badge badge-success" style={{ color: 'var(--success, #1db954)', fontWeight: 600 }}>● Connected</span>
+                  <button className="btn btn-danger btn-sm" type="button" onClick={handleDisconnect}>Disconnect</button>
+                </div>
+              ) : (
+                <div className="spotify-connect-hint">
+                  <p style={{ marginBottom: 8 }}>Connect your Spotify account to access private playlists.</p>
+                  <button className="btn btn-primary" type="button" onClick={handleConnectSpotify}>Connect Spotify Account</button>
+                  <div style={{ marginTop: 8 }}>
+                    <small style={{ color: 'var(--text-muted)' }}>
+                      Opens Spotify authorization in a new tab. Make sure to add{' '}
+                      <code>http://YOUR-IP:8000/api/spotify/callback</code>{' '}
+                      to your Spotify app&apos;s Redirect URIs.
+                    </small>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

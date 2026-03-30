@@ -141,3 +141,15 @@ export async function testSlskd() {
 export async function testSpotify() {
   return request('/settings/test/spotify', { method: 'POST' });
 }
+
+export async function getSpotifyAuthStatus() {
+  return request('/spotify/auth/status');
+}
+
+export async function getSpotifyAuthUrl() {
+  return request('/spotify/auth');
+}
+
+export async function disconnectSpotify() {
+  return request('/spotify/auth', { method: 'DELETE' });
+}
