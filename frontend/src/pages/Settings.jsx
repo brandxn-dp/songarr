@@ -71,7 +71,8 @@ export default function Settings({ addToast }) {
     setError(null);
     try {
       const data = await getSettings();
-      setForm((prev) => ({ ...prev, ...data }));
+      // Backend returns { settings: { key: value, ... } }
+      setForm((prev) => ({ ...prev, ...(data.settings ?? data) }));
     } catch (e) {
       setError(e.message);
     } finally {

@@ -129,8 +129,8 @@ export async function getSettings() {
 
 export async function updateSettings(data) {
   return request('/settings', {
-    method: 'PUT',
-    body: JSON.stringify(data),
+    method: 'PATCH',
+    body: JSON.stringify({ settings: data }),
   });
 }
 
