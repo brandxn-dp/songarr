@@ -23,7 +23,7 @@ export default function SpotifyCallback() {
       return;
     }
 
-    exchangeSpotifyCode(code, 'http://localhost:8000/spotify-callback')
+    exchangeSpotifyCode(code, 'http://127.0.0.1:8000/spotify-callback')
       .then(() => {
         setStatus('success');
         setTimeout(() => navigate('/settings?spotify_connected=1'), 1500);

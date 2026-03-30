@@ -132,7 +132,7 @@ export default function Settings({ addToast }) {
         code = u.searchParams.get('code') || code;
       } catch {}
 
-      await exchangeSpotifyCode(code, 'http://localhost:8000/spotify-callback');
+      await exchangeSpotifyCode(code, 'http://127.0.0.1:8000/spotify-callback');
       addToast('success', 'Spotify connected successfully!');
       setShowSpotifyOAuth(false);
       setPastedUrl('');
@@ -357,14 +357,14 @@ export default function Settings({ addToast }) {
                         Open Spotify Authorization ↗
                       </a>
                       <p style={{ marginTop: '0.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                        Authorize in the new tab. Make sure <code>http://localhost:8000/spotify-callback</code> is added as a Redirect URI in your{' '}
+                        Authorize in the new tab. Make sure <code>http://127.0.0.1:8000/spotify-callback</code> is added as a Redirect URI in your{' '}
                         <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noreferrer">Spotify app settings</a>.
                       </p>
                     </div>
 
                     {oauthStep >= 2 && (
                       <div>
-                        <strong>Step 2:</strong> After authorizing, your browser will redirect to <code>localhost:8000</code>.
+                        <strong>Step 2:</strong> After authorizing, your browser will redirect to <code>127.0.0.1:8000</code>.
                         <ul style={{ margin: '0.5rem 0', paddingLeft: '1.2rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
                           <li>If Songarr opened automatically — you&apos;re done! Check the connection status above.</li>
                           <li>If you see a &quot;connection refused&quot; error, <strong>copy the full URL from the address bar</strong> and paste it below:</li>
@@ -372,7 +372,7 @@ export default function Settings({ addToast }) {
                         <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
                           <input
                             className="form-control"
-                            placeholder="http://localhost:8000/spotify-callback?code=AQD..."
+                            placeholder="http://127.0.0.1:8000/spotify-callback?code=AQD..."
                             value={pastedUrl}
                             onChange={e => setPastedUrl(e.target.value)}
                             style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}

@@ -66,7 +66,7 @@ async def _get_spotify_with_oauth(db: AsyncSession) -> SpotifyService:
 
     # Determine a redirect_uri placeholder (not used for refresh, just needed for init)
     # We use a dummy value since refresh doesn't need it to match Spotify's redirect
-    redirect_uri = "http://localhost:8000/spotify-callback"
+    redirect_uri = "http://127.0.0.1:8000/spotify-callback"
 
     # Check if token is valid (with 60s buffer)
     if access_token and expires_at > (time.time() - 60):
@@ -141,7 +141,7 @@ async def spotify_auth(db: AsyncSession = Depends(get_db)):
     client_secret = settings.get("spotify_client_secret", "")
     if not client_id or not client_secret:
         raise HTTPException(422, "Spotify credentials not configured")
-    redirect_uri = "http://localhost:8000/spotify-callback"
+    redirect_uri = "http://127.0.0.1:8000/spotify-callback"
     auth_url = SpotifyService.get_auth_url(client_id, client_secret, redirect_uri)
     return {"auth_url": auth_url, "redirect_uri": redirect_uri}
 
@@ -150,7 +150,7 @@ async def spotify_auth(db: AsyncSession = Depends(get_db)):
 async def spotify_exchange(body: dict, db: AsyncSession = Depends(get_db)):
     """Exchange an auth code (from paste or auto-callback) for tokens."""
     code = body.get("code", "").strip()
-    redirect_uri = body.get("redirect_uri", "http://localhost:8000/spotify-callback")
+    redirect_uri = body.get("redirect_uri", "http://127.0.0.1:8000/spotify-callback")
     if not code:
         raise HTTPException(400, "code is required")
 
