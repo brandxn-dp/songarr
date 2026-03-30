@@ -1,34 +1,19 @@
 version: '3.9'
 
 services:
-  slskd:
-    image: slskd/slskd:latest
-    container_name: songarr-slskd
-    ports:
-      - "5030:5030"
-      - "50300:50300"
-    volumes:
-      - ${SLSKD_DATA_PATH:-/mnt/user/appdata/songarr/slskd}:/app
-      - ${DOWNLOAD_PATH:-/mnt/user/downloads/songarr}:/app/downloads
-    environment:
-      - SLSKD_REMOTE_CONFIGURATION=true
-    restart: unless-stopped
-
   songarr:
     image: ghcr.io/brandxn-dp/songarr:latest
     container_name: songarr
     ports:
       - "8000:8000"
     volumes:
-      - ${SONGARR_DATA_PATH:-/mnt/user/appdata/songarr/data}:/app/data
+      - ${SONGARR_DATA_PATH:-/mnt/user/appdata/songarr}:/app/data
       - ${DOWNLOAD_PATH:-/mnt/user/downloads/songarr}:/downloads
       - ${MUSIC_PATH:-/mnt/user/media/music}:/music
     environment:
-      - SLSKD_URL=http://slskd:5030
+      - SLSKD_URL=${SLSKD_URL:-http://192.168.1.x:5030}
       - SLSKD_API_KEY=${SLSKD_API_KEY:-changeme}
       - MUSIC_LIBRARY_PATH=/music
       - DOWNLOAD_PATH=/downloads
       - DATABASE_URL=sqlite+aiosqlite:////app/data/songarr.db
-    depends_on:
-      - slskd
     restart: unless-stopped
