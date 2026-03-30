@@ -1,0 +1,40 @@
+version: '3.9'
+
+services:
+  slskd:
+    image: slskd/slskd:latest
+    container_name: songarr-slskd
+    ports:
+      - "5030:5030"
+      - "50300:50300"
+    volumes:
+      - ./data/slskd:/app
+      - ./downloads:/app/downloads
+      - ./music:/music
+    environment:
+      - SLSKD_REMOTE_CONFIGURATION=true
+    restart: unless-stopped
+
+  songarr-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: songarr-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data/db:/app/data
+      - ./downloads:/downloads
+      - ./music:/music
+    environment:
+      - SLSKD_URL=http://slskd:5030
+      - SLSKD_API_KEY=${SLSKD_API_KEY:-changeme}
+      - MUSIC_LIBRARY_PATH=/music
+      - DOWNLOAD_PATH=/downloads
+      - DATABASE_URL=sqlite+aiosqlite:////app/data/songarr.db
+    depends_on:
+      - slskd
+    restart: unless-stopped
+
+volumes:
+  slskd_data:
