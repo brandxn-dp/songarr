@@ -74,8 +74,17 @@ export default function Dashboard({ addToast, downloads = [], connected = false 
 
   const handleClearFailed = async () => {
     const failed = downloads.filter((d) => d.status?.toLowerCase() === 'failed');
+    if (!failed.length) return;
     await Promise.allSettled(failed.map((d) => cancelDownload(d.song_id || d.id)));
-    addToast('info', `Cleared ${failed.length} failed`, null);
+    addToast('info', `Cleared ${failed.length} failed download${failed.length !== 1 ? 's' : ''}`, null);
+  };
+
+  const handleDismiss = async (songId) => {
+    try {
+      await cancelDownload(songId);
+    } catch {
+      // already gone — ignore 404s
+    }
   };
 
   const activeDownloads = downloads.filter((d) =>
@@ -227,7 +236,10 @@ export default function Dashboard({ addToast, downloads = [], connected = false 
                           {['queued', 'downloading', 'failed'].includes(dl.status?.toLowerCase()) && (
                             <button
                               className="btn btn-danger btn-xs"
-                              onClick={() => handleCancel(dl.song_id || dl.id)}
+                              onClick={() => dl.status?.toLowerCase() === 'failed'
+                                ? handleDismiss(dl.song_id || dl.id)
+                                : handleCancel(dl.song_id || dl.id)
+                              }
                               title={dl.status?.toLowerCase() === 'failed' ? 'Dismiss' : 'Cancel'}
                             >
                               ✕

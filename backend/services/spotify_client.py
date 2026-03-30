@@ -153,11 +153,10 @@ class SpotifyService:
         limit = 100
 
         while True:
-            # Use _get() directly to avoid spotipy adding additional_types,
-            # which causes 403s on newer Spotify API versions
+            # No fields filter — Spotify 403s on certain field combinations
+            # with Client Credentials. Fetch all fields and parse what we need.
             page = self._sp._get(
                 f"playlists/{playlist_id}/tracks",
-                fields="items(track(id,name,artists,album,track_number,disc_number,duration_ms,external_ids,is_local)),next",
                 limit=limit,
                 offset=offset,
             )
