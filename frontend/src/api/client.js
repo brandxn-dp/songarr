@@ -150,6 +150,13 @@ export async function getSpotifyAuthUrl() {
   return request('/spotify/auth');
 }
 
+export async function exchangeSpotifyCode(code, redirect_uri) {
+  return request('/spotify/exchange', {
+    method: 'POST',
+    body: JSON.stringify({ code, redirect_uri }),
+  });
+}
+
 export async function disconnectSpotify() {
   return request('/spotify/auth', { method: 'DELETE' });
 }

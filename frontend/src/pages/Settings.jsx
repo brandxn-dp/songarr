@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { getSettings, updateSettings, testSlskd, testSpotify, getSpotifyAuthStatus, getSpotifyAuthUrl, disconnectSpotify } from '../api/client.js';
+import { getSettings, updateSettings, testSlskd, testSpotify, getSpotifyAuthStatus, getSpotifyAuthUrl, exchangeSpotifyCode, disconnectSpotify } from '../api/client.js';
 
 const TEMPLATE_VARS = [
   '{artist}', '{album_artist}', '{album}', '{title}',
@@ -67,6 +67,12 @@ export default function Settings({ addToast }) {
   const [spotifyTestMsg, setSpotifyTestMsg] = useState('');
   const [spotifyConnected, setSpotifyConnected] = useState(false);
 
+  const [showSpotifyOAuth, setShowSpotifyOAuth] = useState(false);
+  const [oauthStep, setOauthStep] = useState(1); // 1 = open link, 2 = paste URL
+  const [oauthAuthUrl, setOauthAuthUrl] = useState('');
+  const [pastedUrl, setPastedUrl] = useState('');
+  const [oauthLoading, setOauthLoading] = useState(false);
+
   const loadSettings = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -107,12 +113,34 @@ export default function Settings({ addToast }) {
 
   const handleConnectSpotify = async () => {
     try {
-      const res = await getSpotifyAuthUrl();
-      if (res?.auth_url) {
-        window.open(res.auth_url, '_blank');
-      }
-    } catch (err) {
-      addToast('error', 'Failed to get auth URL', err.message);
+      const data = await getSpotifyAuthUrl();
+      setOauthAuthUrl(data.auth_url);
+      setOauthStep(1);
+      setShowSpotifyOAuth(true);
+    } catch (e) {
+      addToast('error', 'Failed to get auth URL', e.message);
+    }
+  };
+
+  const handlePasteSubmit = async () => {
+    setOauthLoading(true);
+    try {
+      // Extract code from pasted URL
+      let code = pastedUrl.trim();
+      try {
+        const u = new URL(code);
+        code = u.searchParams.get('code') || code;
+      } catch {}
+
+      await exchangeSpotifyCode(code, 'http://localhost:8000/spotify-callback');
+      addToast('success', 'Spotify connected successfully!');
+      setShowSpotifyOAuth(false);
+      setPastedUrl('');
+      loadSpotifyStatus();
+    } catch (e) {
+      addToast('error', 'Failed to connect Spotify', e.message);
+    } finally {
+      setOauthLoading(false);
     }
   };
 
@@ -305,21 +333,61 @@ export default function Settings({ addToast }) {
           <div className="spotify-connect-panel" style={{ marginTop: 16 }}>
             <div className="form-group">
               <label>ACCOUNT CONNECTION</label>
-              {spotifyConnected ? (
-                <div className="spotify-connected" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span className="badge badge-success" style={{ color: 'var(--success, #1db954)', fontWeight: 600 }}>● Connected</span>
-                  <button className="btn btn-danger btn-sm" type="button" onClick={handleDisconnect}>Disconnect</button>
-                </div>
-              ) : (
-                <div className="spotify-connect-hint">
-                  <p style={{ marginBottom: 8 }}>Connect your Spotify account to access private playlists.</p>
-                  <button className="btn btn-primary" type="button" onClick={handleConnectSpotify}>Connect Spotify Account</button>
-                  <div style={{ marginTop: 8 }}>
-                    <small style={{ color: 'var(--text-muted)' }}>
-                      Opens Spotify authorization in a new tab. Make sure to add{' '}
-                      <code>http://YOUR-IP:8000/api/spotify/callback</code>{' '}
-                      to your Spotify app&apos;s Redirect URIs.
-                    </small>
+              {!showSpotifyOAuth && (
+                spotifyConnected ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <span className="badge badge-success" style={{ color: 'var(--success, #1db954)', fontWeight: 600 }}>● Spotify Connected</span>
+                    <button className="btn btn-danger btn-sm" type="button" onClick={handleDisconnect}>Disconnect</button>
+                  </div>
+                ) : (
+                  <button className="btn btn-primary" type="button" onClick={handleConnectSpotify}>
+                    Connect Spotify Account
+                  </button>
+                )
+              )}
+
+              {showSpotifyOAuth && (
+                <div className="card" style={{ marginTop: '1rem', border: '1px solid var(--border)' }}>
+                  <div className="card-header">CONNECT SPOTIFY ACCOUNT</div>
+                  <div className="card-body">
+                    <div style={{ marginBottom: '1rem' }}>
+                      <strong>Step 1:</strong>{' '}
+                      <a href={oauthAuthUrl} target="_blank" rel="noreferrer" className="btn btn-primary btn-sm"
+                         onClick={() => setOauthStep(2)}>
+                        Open Spotify Authorization ↗
+                      </a>
+                      <p style={{ marginTop: '0.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                        Authorize in the new tab. Make sure <code>http://localhost:8000/spotify-callback</code> is added as a Redirect URI in your{' '}
+                        <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noreferrer">Spotify app settings</a>.
+                      </p>
+                    </div>
+
+                    {oauthStep >= 2 && (
+                      <div>
+                        <strong>Step 2:</strong> After authorizing, your browser will redirect to <code>localhost:8000</code>.
+                        <ul style={{ margin: '0.5rem 0', paddingLeft: '1.2rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                          <li>If Songarr opened automatically — you&apos;re done! Check the connection status above.</li>
+                          <li>If you see a &quot;connection refused&quot; error, <strong>copy the full URL from the address bar</strong> and paste it below:</li>
+                        </ul>
+                        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                          <input
+                            className="form-control"
+                            placeholder="http://localhost:8000/spotify-callback?code=AQD..."
+                            value={pastedUrl}
+                            onChange={e => setPastedUrl(e.target.value)}
+                            style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}
+                          />
+                          <button className="btn btn-primary" type="button" onClick={handlePasteSubmit} disabled={!pastedUrl || oauthLoading}>
+                            {oauthLoading ? '…' : 'Connect'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <button className="btn btn-ghost btn-sm" type="button" style={{ marginTop: '1rem' }}
+                            onClick={() => setShowSpotifyOAuth(false)}>
+                      Cancel
+                    </button>
                   </div>
                 </div>
               )}

@@ -7,6 +7,7 @@ import Search from './pages/Search.jsx';
 import Library from './pages/Library.jsx';
 import SpotifyImport from './pages/SpotifyImport.jsx';
 import Settings from './pages/Settings.jsx';
+import SpotifyCallback from './pages/SpotifyCallback.jsx';
 import { useDownloads } from './hooks/useDownloads.js';
 import { useToast } from './hooks/useToast.js';
 
@@ -25,6 +26,7 @@ export default function App() {
           <Route path="/library" element={<Library addToast={addToast} />} />
           <Route path="/spotify" element={<SpotifyImport addToast={addToast} />} />
           <Route path="/settings" element={<Settings addToast={addToast} />} />
+          <Route path="/spotify-callback" element={<SpotifyCallback />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

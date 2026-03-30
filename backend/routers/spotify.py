@@ -5,7 +5,7 @@ import logging
 import time
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -66,7 +66,7 @@ async def _get_spotify_with_oauth(db: AsyncSession) -> SpotifyService:
 
     # Determine a redirect_uri placeholder (not used for refresh, just needed for init)
     # We use a dummy value since refresh doesn't need it to match Spotify's redirect
-    redirect_uri = "http://localhost:8000/api/spotify/callback"
+    redirect_uri = "http://localhost:8000/spotify-callback"
 
     # Check if token is valid (with 60s buffer)
     if access_token and expires_at > (time.time() - 60):
@@ -134,32 +134,36 @@ def _raise_spotify_error(exc: Exception) -> None:
 # ---------------------------------------------------------------------------
 
 @router.get("/spotify/auth")
-async def spotify_auth(request: Request, db: AsyncSession = Depends(get_db)):
+async def spotify_auth(db: AsyncSession = Depends(get_db)):
     """Return Spotify OAuth URL for the user to visit."""
     settings = await _load_settings(db)
     client_id = settings.get("spotify_client_id", "")
     client_secret = settings.get("spotify_client_secret", "")
     if not client_id or not client_secret:
         raise HTTPException(422, "Spotify credentials not configured")
-    redirect_uri = str(request.base_url).rstrip("/") + "/api/spotify/callback"
+    redirect_uri = "http://localhost:8000/spotify-callback"
     auth_url = SpotifyService.get_auth_url(client_id, client_secret, redirect_uri)
     return {"auth_url": auth_url, "redirect_uri": redirect_uri}
 
 
-@router.get("/spotify/callback")
-async def spotify_callback(code: str, request: Request, db: AsyncSession = Depends(get_db)):
-    """Handle Spotify OAuth callback, store token, redirect to frontend."""
+@router.post("/spotify/exchange")
+async def spotify_exchange(body: dict, db: AsyncSession = Depends(get_db)):
+    """Exchange an auth code (from paste or auto-callback) for tokens."""
+    code = body.get("code", "").strip()
+    redirect_uri = body.get("redirect_uri", "http://localhost:8000/spotify-callback")
+    if not code:
+        raise HTTPException(400, "code is required")
+
     settings = await _load_settings(db)
     client_id = settings.get("spotify_client_id", "")
     client_secret = settings.get("spotify_client_secret", "")
-    redirect_uri = str(request.base_url).rstrip("/") + "/api/spotify/callback"
 
     try:
         token_info = SpotifyService.exchange_code(client_id, client_secret, redirect_uri, code)
     except Exception as exc:
         raise HTTPException(502, f"Token exchange failed: {exc}")
 
-    # Store tokens in settings
+    # Store tokens
     async def _upsert(key, val):
         existing = (await db.execute(select(AppSettings).where(AppSettings.key == key))).scalar_one_or_none()
         if existing:
@@ -171,10 +175,18 @@ async def spotify_callback(code: str, request: Request, db: AsyncSession = Depen
     await _upsert("spotify_refresh_token", token_info.get("refresh_token", ""))
     await _upsert("spotify_token_expires", str(token_info.get("expires_at", 0)))
     await db.commit()
-    logger.info("Spotify OAuth token stored successfully")
+    logger.info("Spotify OAuth token stored via code exchange")
+    return {"connected": True}
 
-    # Redirect to settings page
-    return RedirectResponse(url="/settings?spotify_connected=1")
+
+@router.get("/spotify/callback")
+async def spotify_callback(code: str = None, error: str = None):
+    """Redirect to the SPA callback handler with the code."""
+    if error:
+        return RedirectResponse(url=f"/spotify-callback?error={error}")
+    if code:
+        return RedirectResponse(url=f"/spotify-callback?code={code}")
+    return RedirectResponse(url="/settings")
 
 
 @router.delete("/spotify/auth", response_model=dict)
