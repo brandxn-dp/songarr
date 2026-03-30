@@ -100,9 +100,9 @@ export async function updateTags(id, tags) {
 // ---- Spotify ----
 
 export async function importSpotifyPlaylist(url) {
-  return request('/spotify/playlists/import', {
+  return request('/spotify/import', {
     method: 'POST',
-    body: JSON.stringify({ url }),
+    body: JSON.stringify({ playlist_url: url }),
   });
 }
 

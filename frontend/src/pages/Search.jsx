@@ -148,15 +148,11 @@ export default function Search({ addToast, downloads = [] }) {
       await downloadResult({
         username: result.username,
         filename: result.filename,
-        size: result.size,
-        display_name: result.display_name,
-        format: result.format,
-        bitrate: result.bitrate,
-        quality_score: result.quality_score,
+        file_size_bytes: result.file_size_bytes,
         artist: metadata.artist,
         title: metadata.title,
-        album: metadata.album,
-        year: metadata.year,
+        album: metadata.album || undefined,
+        year: metadata.year ? parseInt(metadata.year, 10) : undefined,
       });
       setQueuedIds((prev) => new Set([...prev, result.filename]));
       setExpandedIdx(null);
@@ -172,8 +168,8 @@ export default function Search({ addToast, downloads = [] }) {
     const sorted = [...results];
     sorted.sort((a, b) => {
       if (sortKey === 'quality_score') return (b.quality_score ?? 0) - (a.quality_score ?? 0);
-      if (sortKey === 'size') return (b.size ?? 0) - (a.size ?? 0);
-      if (sortKey === 'format') return (a.format ?? '').localeCompare(b.format ?? '');
+      if (sortKey === 'size') return (b.file_size_bytes ?? 0) - (a.file_size_bytes ?? 0);
+      if (sortKey === 'format') return (a.file_format ?? '').localeCompare(b.file_format ?? '');
       return 0;
     });
     return sorted;
@@ -305,11 +301,11 @@ export default function Search({ addToast, downloads = [] }) {
                         <div className="search-result-name" title={result.filename}>
                           {result.display_name || result.filename}
                         </div>
-                        <FormatBadge format={result.format} />
+                        <FormatBadge format={result.file_format} />
                         <div className="search-result-meta">
                           {result.bitrate ? `${result.bitrate} kbps` : <span style={{ color: 'var(--text-muted)' }}>—</span>}
                         </div>
-                        <div className="search-result-meta">{formatBytes(result.size)}</div>
+                        <div className="search-result-meta">{formatBytes(result.file_size_bytes)}</div>
                         <div>
                           <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>{score}/100</div>
                           <div className="quality-bar-wrapper">

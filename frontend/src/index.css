@@ -10,18 +10,18 @@
   --bg-input: #111111;
   --bg-modal: #161616;
 
-  --accent: #e8b84b;
-  --accent-dim: #c99a35;
-  --accent-glow: rgba(232, 184, 75, 0.12);
+  --accent: #3ddc84;
+  --accent-dim: #29b86d;
+  --accent-glow: rgba(61, 220, 132, 0.10);
 
   --text-primary: #e0e0e0;
   --text-secondary: #888888;
   --text-muted: #555555;
-  --text-accent: #e8b84b;
+  --text-accent: #3ddc84;
 
   --border: #2a2a2a;
   --border-hover: #3a3a3a;
-  --border-accent: rgba(232, 184, 75, 0.4);
+  --border-accent: rgba(61, 220, 132, 0.35);
 
   --status-downloading: #3b9eff;
   --status-completed: #4caf82;
@@ -522,7 +522,7 @@ tr:hover .td-actions {
 }
 
 .badge-accent {
-  background: rgba(232, 184, 75, 0.12);
+  background: rgba(61, 220, 132, 0.10);
   color: var(--accent);
   border: 1px solid rgba(232, 184, 75, 0.25);
 }
