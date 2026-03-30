@@ -206,84 +206,113 @@ class QueueManager:
                 return
             settings = await _get_settings(session)
 
-        # ----------------------------------------------------------------
-        # 1. Search slskd
-        # ----------------------------------------------------------------
-        await self._broadcast({"song_id": song_id, "status": "searching", "progress": 0})
-        async with AsyncSessionLocal() as session:
-            await _set_song_status(session, song_id, "searching")
+            # Check for an existing DownloadJob (manual download — user picked a file)
+            existing_job = (await session.execute(
+                select(DownloadJob)
+                .where(DownloadJob.song_id == song_id)
+                .where(DownloadJob.slskd_username.isnot(None))
+                .where(DownloadJob.slskd_filename.isnot(None))
+                .order_by(DownloadJob.created_at.desc())
+            )).scalars().first()
 
         slskd_url = settings.get("slskd_url", "http://localhost:5030")
         slskd_key = settings.get("slskd_api_key", "")
         client = SlskdClient(base_url=slskd_url, api_key=slskd_key)
 
-        query = f"{song.artist} {song.title}"
-        logger.info("Searching slskd for: %s", query)
-
-        try:
-            results = await client.search(query)
-        except Exception as exc:
-            logger.error("slskd search error for song_id=%d: %s", song_id, exc)
-            results = []
-
-        # Filter by preferred format / min bitrate
-        preferred_fmt = settings.get("preferred_format", "FLAC").upper()
-        try:
-            min_bitrate = int(settings.get("min_bitrate", "128"))
-        except ValueError:
-            min_bitrate = 128
-
-        def _acceptable(r):
-            if r.file_format.upper() == preferred_fmt:
-                return True
-            if r.bitrate and r.bitrate >= min_bitrate:
-                return True
-            if r.quality_score >= 40:
-                return True
-            return False
-
-        filtered = [r for r in results if _acceptable(r)]
-        if not filtered:
-            filtered = results  # no results match filter, use all
-
-        if not filtered:
-            async with AsyncSessionLocal() as session:
-                await _set_song_status(session, song_id, "failed", error="No results found on Soulseek")
-            self._failed_today += 1
-            await self._broadcast({"song_id": song_id, "status": "failed", "progress": None})
-            return
-
-        best = filtered[0]  # already sorted by quality_score desc
-
-        # ----------------------------------------------------------------
-        # 2. Create DownloadJob and start download
-        # ----------------------------------------------------------------
-        async with AsyncSessionLocal() as session:
-            job = DownloadJob(
-                song_id=song_id,
-                slskd_username=best.username,
-                slskd_filename=best.filename,
-                file_format=best.file_format,
-                bitrate=best.bitrate,
-                file_size_bytes=best.file_size_bytes,
-                status="queued",
-                progress_percent=0.0,
+        if existing_job:
+            # ----------------------------------------------------------------
+            # Manual download — skip search, use the file the user picked
+            # ----------------------------------------------------------------
+            job_id = existing_job.id
+            dl_username = existing_job.slskd_username
+            dl_filename = existing_job.slskd_filename
+            dl_size = existing_job.file_size_bytes or 0
+            dl_format = existing_job.file_format
+            dl_bitrate = existing_job.bitrate
+            logger.info(
+                "Manual download: using existing job for song_id=%d: %s from %s",
+                song_id, dl_filename, dl_username,
             )
-            session.add(job)
-            await session.commit()
-            await session.refresh(job)
-            job_id = job.id
+        else:
+            # ----------------------------------------------------------------
+            # Auto download — search slskd first
+            # ----------------------------------------------------------------
+            await self._broadcast({"song_id": song_id, "status": "searching", "progress": 0})
+            async with AsyncSessionLocal() as session:
+                await _set_song_status(session, song_id, "searching")
 
+            query = f"{song.artist} {song.title}"
+            logger.info("Searching slskd for: %s", query)
+
+            try:
+                results = await client.search(query)
+            except Exception as exc:
+                logger.error("slskd search error for song_id=%d: %s", song_id, exc)
+                results = []
+
+            preferred_fmt = settings.get("preferred_format", "FLAC").upper()
+            try:
+                min_bitrate = int(settings.get("min_bitrate", "128"))
+            except ValueError:
+                min_bitrate = 128
+
+            def _acceptable(r):
+                if r.file_format.upper() == preferred_fmt:
+                    return True
+                if r.bitrate and r.bitrate >= min_bitrate:
+                    return True
+                if r.quality_score >= 40:
+                    return True
+                return False
+
+            filtered = [r for r in results if _acceptable(r)]
+            if not filtered:
+                filtered = results
+
+            if not filtered:
+                async with AsyncSessionLocal() as session:
+                    await _set_song_status(session, song_id, "failed", error="No results found on Soulseek")
+                self._failed_today += 1
+                await self._broadcast({"song_id": song_id, "status": "failed", "progress": None})
+                return
+
+            best = filtered[0]
+
+            async with AsyncSessionLocal() as session:
+                job = DownloadJob(
+                    song_id=song_id,
+                    slskd_username=best.username,
+                    slskd_filename=best.filename,
+                    file_format=best.file_format,
+                    bitrate=dl_bitrate,
+                    file_size_bytes=best.file_size_bytes,
+                    status="queued",
+                    progress_percent=0.0,
+                )
+                session.add(job)
+                await session.commit()
+                await session.refresh(job)
+                job_id = job.id
+
+            dl_username = best.username
+            dl_filename = best.filename
+            dl_size = best.file_size_bytes
+            dl_format = best.file_format
+            dl_bitrate = best.bitrate
+
+        # ----------------------------------------------------------------
+        # 2. Start download
+        # ----------------------------------------------------------------
         logger.info(
             "Initiating download from %s: %s (song_id=%d)",
-            best.username, best.filename, song_id,
+            dl_username, dl_filename, song_id,
         )
 
         try:
             transfer_id = await client.download(
-                username=best.username,
-                filename=best.filename,
-                size=best.file_size_bytes,
+                username=dl_username,
+                filename=dl_filename,
+                size=dl_size,
             )
         except Exception as exc:
             logger.error("Download initiation failed for song_id=%d: %s", song_id, exc)
@@ -317,7 +346,7 @@ class QueueManager:
 
             try:
                 status_data = await client.get_download_status(
-                    username=best.username, transfer_id=transfer_id
+                    username=dl_username, transfer_id=transfer_id
                 )
             except Exception as exc:
                 logger.debug("Status poll error for song_id=%d: %s", song_id, exc)
@@ -328,7 +357,7 @@ class QueueManager:
 
             state: str = status_data.get("state", "")
             bytes_transferred: int = status_data.get("bytesTransferred", 0)
-            file_size: int = status_data.get("size", best.file_size_bytes or 1)
+            file_size: int = status_data.get("size", dl_size or 1)
             progress = min(100.0, (bytes_transferred / max(file_size, 1)) * 100)
 
             async with AsyncSessionLocal() as session:
@@ -360,7 +389,7 @@ class QueueManager:
         if not local_path:
             # Try to reconstruct from download path
             download_base = settings.get("download_path", str(Path.home() / "Music" / "Songarr" / "downloads"))
-            filename_base = Path(best.filename.replace("\\", "/")).name
+            filename_base = Path(dl_filename.replace("\\", "/")).name
             candidate = Path(download_base) / filename_base
             if candidate.exists():
                 local_path = str(candidate)
@@ -443,7 +472,7 @@ class QueueManager:
         # ----------------------------------------------------------------
         final_path = Path(organized_path)
         file_size = final_path.stat().st_size if final_path.exists() else 0
-        ext = final_path.suffix.lstrip(".").upper() or best.file_format
+        ext = final_path.suffix.lstrip(".").upper() or dl_format
 
         # Attempt to read audio properties via mutagen
         duration_secs: Optional[float] = None
@@ -488,7 +517,7 @@ class QueueManager:
                 file_path=str(final_path),
                 file_format=ext,
                 file_size_bytes=file_size,
-                bitrate=best.bitrate,
+                bitrate=dl_bitrate,
                 sample_rate=sample_rate,
                 channels=channels,
                 duration_seconds=duration_secs,

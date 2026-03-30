@@ -180,6 +180,9 @@ class SlskdClient:
             resp = await client.post(
                 f"/api/v0/transfers/downloads/{username}", json=payload
             )
+            if not resp.is_success:
+                body = resp.text
+                logger.error("slskd download 400 body: %s", body)
             resp.raise_for_status()
             data = resp.json()
             # slskd returns the transfer object; id may be in 'id' field
