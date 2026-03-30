@@ -137,7 +137,10 @@ async def health():
 # Serve React frontend (production build)
 # ---------------------------------------------------------------------------
 
-_frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
+# Check container path first (./frontend/dist), then dev path (../frontend/dist)
+_frontend_dist = Path(__file__).parent / "frontend" / "dist"
+if not _frontend_dist.exists():
+    _frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
 if _frontend_dist.exists():
     # Serve static assets under /assets (Vite default output)
     _assets_dir = _frontend_dist / "assets"
