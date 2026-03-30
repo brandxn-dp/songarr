@@ -65,18 +65,22 @@ export function useDownloads() {
       try {
         const data = JSON.parse(event.data);
         if (Array.isArray(data)) {
-          // Full state snapshot
+          // Full state snapshot (SongWithJob array)
           setDownloads(
-            data.map((d) => ({
-              id: d.song_id ?? d.id,
-              song_id: d.song_id ?? d.id,
-              status: d.status,
-              progress: d.progress ?? 0,
-              title: d.title ?? '',
-              artist: d.artist ?? '',
-              format: d.format ?? '',
-              file_size: d.file_size ?? null,
-            }))
+            data.map((d) => {
+              const song = d.song ?? d;
+              const job = d.job ?? {};
+              return {
+                id: song.id,
+                song_id: song.id,
+                status: song.status,
+                progress: job.progress_percent ?? 0,
+                title: song.title ?? '',
+                artist: song.artist ?? '',
+                format: job.file_format ?? '',
+                file_size: job.file_size_bytes ?? null,
+              };
+            })
           );
         } else {
           applyUpdate(data);
@@ -111,16 +115,21 @@ export function useDownloads() {
       .then((data) => {
         if (!unmounted.current && Array.isArray(data)) {
           setDownloads(
-            data.map((d) => ({
-              id: d.song_id ?? d.id,
-              song_id: d.song_id ?? d.id,
-              status: d.status,
-              progress: d.progress ?? 0,
-              title: d.title ?? '',
-              artist: d.artist ?? '',
-              format: d.format ?? '',
-              file_size: d.file_size ?? null,
-            }))
+            data.map((d) => {
+              // Backend returns SongWithJob: { song: {...}, job: {...} }
+              const song = d.song ?? d;
+              const job = d.job ?? {};
+              return {
+                id: song.id,
+                song_id: song.id,
+                status: song.status,
+                progress: job.progress_percent ?? 0,
+                title: song.title ?? '',
+                artist: song.artist ?? '',
+                format: job.file_format ?? '',
+                file_size: job.file_size_bytes ?? null,
+              };
+            })
           );
         }
       })

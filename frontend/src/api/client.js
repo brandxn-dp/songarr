@@ -36,7 +36,7 @@ export async function searchSoulseek(artist, title, rawQuery) {
     if (artist) params.set('artist', artist);
     if (title) params.set('title', title);
   }
-  return request(`/search/soulseek?${params.toString()}`);
+  return request(`/search?${params.toString()}`);
 }
 
 export async function downloadResult(data) {
